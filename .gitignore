@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+*.o
+*.elf
+*.bin
+*.map
+*.asm
+
+# Odin compiler artifacts
+*.ll
+*.bc
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.dSYM/
+core
+
+# Nix
+result
+result-*
+
+# Temporary files
+*.tmp
+*.bak
