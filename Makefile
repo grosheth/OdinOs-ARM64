@@ -47,7 +47,7 @@ BLUE := \033[0;34m
 YELLOW := \033[0;33m
 NC := \033[0m # No Color
 
-.PHONY: all clean run debug info help
+.PHONY: all clean run debug info help verify test
 
 all: $(KERNEL_BIN)
 	@echo "$(GREEN)✓ Build complete: $(KERNEL_BIN)$(NC)"
@@ -58,16 +58,40 @@ $(BUILD_DIR)/kernel.o: $(shell find $(SRC_DIR) -name '*.odin')
 	@mkdir -p $(BUILD_DIR)
 	$(ODIN) build $(SRC_DIR) $(ODIN_FLAGS) -out:$(BUILD_DIR)/kernel.o
 
-# Build boot assembly (if needed)
+# Build boot assembly
 $(BUILD_DIR)/boot.o: $(BOOT_DIR)/boot.s
 	@echo "$(BLUE)Building boot assembly...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -c $(BOOT_DIR)/boot.s -o $(BUILD_DIR)/boot.o
 
+# Build exception vectors assembly
+$(BUILD_DIR)/exceptions.o: $(BOOT_DIR)/exceptions.s
+	@echo "$(BLUE)Building exception vectors...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -c $(BOOT_DIR)/exceptions.s -o $(BUILD_DIR)/exceptions.o
+
+# Build MMU assembly
+$(BUILD_DIR)/mmu.o: $(BOOT_DIR)/mmu.s
+	@echo "$(BLUE)Building MMU assembly...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -c $(BOOT_DIR)/mmu.s -o $(BUILD_DIR)/mmu.o
+
+# Build WFE assembly
+$(BUILD_DIR)/wfe.o: $(BOOT_DIR)/wfe.s
+	@echo "$(BLUE)Building WFE assembly...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -c $(BOOT_DIR)/wfe.s -o $(BUILD_DIR)/wfe.o
+
+# Build mask_interrupts assembly
+$(BUILD_DIR)/mask_interrupts.o: $(BOOT_DIR)/mask_interrupts.s
+	@echo "$(BLUE)Building interrupt mask assembly...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	$(CC) -c $(BOOT_DIR)/mask_interrupts.s -o $(BUILD_DIR)/mask_interrupts.o
+
 # Link kernel
-$(KERNEL_ELF): $(BUILD_DIR)/kernel.o
+$(KERNEL_ELF): $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/mask_interrupts.o $(BUILD_DIR)/kernel.o
 	@echo "$(BLUE)Linking kernel...$(NC)"
-	$(LD) $(LDFLAGS) -o $(KERNEL_ELF) $(BUILD_DIR)/kernel.o
+	$(LD) $(LDFLAGS) -o $(KERNEL_ELF) $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/mask_interrupts.o $(BUILD_DIR)/kernel.o
 
 # Create flat binary
 $(KERNEL_BIN): $(KERNEL_ELF)
@@ -111,6 +135,41 @@ clean:
 	rm -rf $(BUILD_DIR)
 	@echo "$(GREEN)Clean complete$(NC)"
 
+# Verify kernel symbols and structure
+verify: $(KERNEL_ELF)
+	@echo "$(BLUE)Verifying kernel build...$(NC)"
+	@echo -n "  Checking _start symbol... "
+	@nm $(KERNEL_ELF) | grep -q "T _start" && echo "$(GREEN)ok$(NC)" || (echo "$(RED)FAIL$(NC)" && exit 1)
+	@echo -n "  Checking kernel_main symbol... "
+	@nm $(KERNEL_ELF) | grep -q "T kernel_main" && echo "$(GREEN)ok$(NC)" || (echo "$(RED)FAIL$(NC)" && exit 1)
+	@echo -n "  Checking exception_vectors symbol... "
+	@nm $(KERNEL_ELF) | grep -q "T exception_vectors" && echo "$(GREEN)ok$(NC)" || (echo "$(RED)FAIL$(NC)" && exit 1)
+	@echo -n "  Checking page table symbols... "
+	@nm $(KERNEL_ELF) | grep -q "page_tables_l0" && echo "$(GREEN)ok$(NC)" || (echo "$(RED)FAIL$(NC)" && exit 1)
+	@echo -n "  Checking kernel size... "
+	@SIZE=$$(stat -c%s $(KERNEL_BIN)); \
+		if [ $$SIZE -lt 1000000 ]; then \
+			echo "$(GREEN)$$SIZE bytes (ok)$(NC)"; \
+		else \
+			echo "$(RED)$$SIZE bytes (too large!)$(NC)"; \
+			exit 1; \
+		fi
+	@echo "$(GREEN)✓ All checks passed$(NC)"
+
+# Quick boot test
+test: $(KERNEL_BIN)
+	@echo "$(BLUE)Running quick boot test...$(NC)"
+	@timeout 3 $(QEMU) $(QEMU_FLAGS) > /tmp/odinos-test.log 2>&1 || true
+	@if grep -q "OdinOS boot complete" /tmp/odinos-test.log; then \
+		echo "$(GREEN)✓ Boot test passed$(NC)"; \
+		rm /tmp/odinos-test.log; \
+	else \
+		echo "$(RED)✗ Boot test failed$(NC)"; \
+		cat /tmp/odinos-test.log; \
+		rm /tmp/odinos-test.log; \
+		exit 1; \
+	fi
+
 # Help
 help:
 	@echo "$(BLUE)OdinOS Makefile - iPhone 7 / ARM64$(NC)"
@@ -121,6 +180,8 @@ help:
 	@echo "  debug   - Run kernel in QEMU with GDB server"
 	@echo "  info    - Show kernel binary information"
 	@echo "  disasm  - Disassemble kernel to build/kernel.asm"
+	@echo "  verify  - Verify kernel symbols and structure"
+	@echo "  test    - Run quick boot test in QEMU"
 	@echo "  clean   - Remove all build artifacts"
 	@echo "  help    - Show this help message"
 	@echo ""
