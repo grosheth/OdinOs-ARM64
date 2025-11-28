@@ -40,17 +40,35 @@ handle_sync_el1_spx :: proc "c" () {
 
 @(export, link_name="handle_irq_el1_spx")
 handle_irq_el1_spx :: proc "c" () {
-    // IRQs are normal - we'll handle them here once we have a timer
-    // For now, just acknowledge we got one
-    kprintln("\n>>> IRQ received (EL1 SPx)")
-    // TODO: Read GIC and dispatch to appropriate handler
-    // For now, just return and hope for the best
+    // IRQ handler - reads interrupt ID from GIC and dispatches to handler
+
+    // Step 1: Acknowledge the interrupt (read IAR)
+    irq := gic_acknowledge_interrupt()
+
+    // Step 2: Dispatch to registered handler
+    if irq != GIC_IRQ_SPURIOUS {
+        irq_dispatch(irq)
+    }
+
+    // Step 3: Signal end of interrupt
+    gic_end_of_interrupt(irq)
 }
 
 @(export, link_name="handle_fiq_el1_spx")
 handle_fiq_el1_spx :: proc "c" () {
-    kprintln("\n!!! EXCEPTION: FIQ (EL1 SPx) !!!")
-    exception_hang()
+    // FIQ handler - similar to IRQ but for fast interrupts
+    // In GICv2, FIQs are rarely used (most interrupts go through IRQ)
+
+    // Acknowledge the interrupt
+    irq := gic_acknowledge_interrupt()
+
+    // Dispatch to handler
+    if irq != GIC_IRQ_SPURIOUS {
+        irq_dispatch(irq)
+    }
+
+    // Signal end of interrupt
+    gic_end_of_interrupt(irq)
 }
 
 @(export, link_name="handle_serror_el1_spx")

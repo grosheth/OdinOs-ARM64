@@ -82,16 +82,10 @@ $(BUILD_DIR)/wfe.o: $(BOOT_DIR)/wfe.s
 	@mkdir -p $(BUILD_DIR)
 	$(CC) -c $(BOOT_DIR)/wfe.s -o $(BUILD_DIR)/wfe.o
 
-# Build mask_interrupts assembly
-$(BUILD_DIR)/mask_interrupts.o: $(BOOT_DIR)/mask_interrupts.s
-	@echo "$(BLUE)Building interrupt mask assembly...$(NC)"
-	@mkdir -p $(BUILD_DIR)
-	$(CC) -c $(BOOT_DIR)/mask_interrupts.s -o $(BUILD_DIR)/mask_interrupts.o
-
 # Link kernel
-$(KERNEL_ELF): $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/mask_interrupts.o $(BUILD_DIR)/kernel.o
+$(KERNEL_ELF): $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/kernel.o
 	@echo "$(BLUE)Linking kernel...$(NC)"
-	$(LD) $(LDFLAGS) -o $(KERNEL_ELF) $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/mask_interrupts.o $(BUILD_DIR)/kernel.o
+	$(LD) $(LDFLAGS) -o $(KERNEL_ELF) $(BUILD_DIR)/boot.o $(BUILD_DIR)/exceptions.o $(BUILD_DIR)/mmu.o $(BUILD_DIR)/wfe.o $(BUILD_DIR)/kernel.o
 
 # Create flat binary
 $(KERNEL_BIN): $(KERNEL_ELF)

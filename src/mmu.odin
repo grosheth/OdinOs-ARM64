@@ -31,8 +31,12 @@ foreign {
     mmu_disable :: proc "c" () ---
 }
 
+// GIC region sizes
+GICD_SIZE :: 0x00010000  // 64KB for GIC Distributor
+GICC_SIZE :: 0x00010000  // 64KB for GIC CPU Interface
+
 // Initialize and enable the MMU
-mmu_init :: proc "c" () -> bool {
+mmu_init :: proc "c" (gic_addrs: GIC_Addresses) -> bool {
     // 1. Initialize page tables (they're already zeroed in BSS)
     init_page_tables()
 
@@ -47,6 +51,21 @@ mmu_init :: proc "c" () -> bool {
     kprint("  - Mapping UART (0x09000000)...")
     map_range(UART_BASE, UART_BASE, UART_SIZE, true, false)
     kprintln(" ok")
+
+    // Map GIC if found
+    if gic_addrs.found {
+        kprint("  - Mapping GIC Distributor (")
+        print_hex64(u64(gic_addrs.distributor_base))
+        kprint(")...")
+        map_range(u64(gic_addrs.distributor_base), u64(gic_addrs.distributor_base), GICD_SIZE, true, false)
+        kprintln(" ok")
+
+        kprint("  - Mapping GIC CPU Interface (")
+        print_hex64(u64(gic_addrs.cpu_interface_base))
+        kprint(")...")
+        map_range(u64(gic_addrs.cpu_interface_base), u64(gic_addrs.cpu_interface_base), GICC_SIZE, true, false)
+        kprintln(" ok")
+    }
 
     // 3. Configure MAIR (Memory Attribute Indirection Register)
     kprint("  - Configuring MAIR...")

@@ -24,7 +24,7 @@ input_buffer: [256]u8    // Command line buffer (255 chars + null terminator)
 buffer_pos: u32 = 0      // Current position in buffer
 
 // Version information
-OS_VERSION :: "0.3"
+OS_VERSION :: "0.4.1"
 OS_TARGET :: "iPhone 7 (A10 Fusion) / ARM64"
 
 // ============================================================================
@@ -360,63 +360,65 @@ shell_init :: proc "c" () {
     buffer_clear()
 
     kprintln("\n========================================")
-    kprintln("   OdinOS Interactive Shell v0.3")
+    kprintln("   OdinOS Interactive Shell v0.4.1")
     kprintln("========================================")
     kprint("\n")
 }
 
 // Main shell loop - read characters and process commands
 shell_run :: proc "c" () {
-    // Mask IRQ and FIQ at CPU level to prevent spurious interrupts
-    // This is a workaround until we have proper interrupt handling
-    mask_interrupts()
-
-    // Demonstrate shell capabilities
-    kprintln("Shell Framework Status:")
-    kprintln("  [✓] Command parsing and dispatch")
-    kprintln("  [✓] Built-in commands (help, version, clear, exit)")
-    kprintln("  [✓] Buffer management and line editing")
-    kprintln("  [!] Interactive input (requires IRQ/FIQ handlers)")
+    kprintln("Interactive shell starting...")
+    kprintln("Type 'help' for available commands")
     kprint("\n")
 
-    kprintln("Testing shell commands:")
-    kprint("\n")
-
-    // Create a dummy command for testing
-    dummy_cmd: Command
-    dummy_cmd.valid = true
-
-    // Demonstrate commands
-    cmd_help(&dummy_cmd)
-    cmd_version(&dummy_cmd)
-
-    // Explain limitation
-    kprintln("===========================================")
-    kprintln("KNOWN LIMITATION:")
-    kprintln("  uart_getc() causes FIQ exceptions without")
-    kprintln("  proper interrupt handling (GIC setup).")
-    kprintln("")
-    kprintln("  To enable interactive input:")
-    kprintln("  1. Implement GIC (Generic Interrupt Controller)")
-    kprintln("  2. Set up IRQ/FIQ handlers")
-    kprintln("  3. Configure UART interrupts properly")
-    kprintln("===========================================")
-    kprint("\n")
-
-    kprintln("For now, commands can be called programmatically.")
-    kprintln("System is ready for iPhone 7 deployment.")
-    kprint("\n")
-
-    // Halt cleanly
-    kprintln("System halting...")
+    // Main input loop
     for {
-        arm_wfe()
+        // Show prompt
+        kprint("OdinOS> ")
+
+        // Clear buffer for new command
+        buffer_clear()
+
+        // Read command line
+        command_complete := false
+        for !command_complete {
+            // Wait for and read character using interrupt-driven I/O
+            c := uart_getc_interrupt()
+
+            // Handle newline/carriage return
+            if c == NEWLINE || c == CARRIAGE_RETURN {
+                uart_putc('\n')  // Echo newline
+                command_complete = true
+                continue
+            }
+
+            // Handle backspace
+            if c == BACKSPACE || c == BACKSPACE_ALT {
+                handle_backspace()
+                continue
+            }
+
+            // Handle printable characters
+            if is_printable(c) {
+                if buffer_add_char(c) {
+                    uart_putc(c)  // Echo character
+                } else {
+                    uart_putc(0x07)  // Buffer full - beep
+                }
+                continue
+            }
+
+            // Ignore other control characters
+        }
+
+        // Get command from buffer
+        cmd_ptr, cmd_len := buffer_get_contents()
+        if cmd_len > 0 {
+            // Parse and execute command
+            cmd := parse_command(cmd_ptr, cmd_len)
+            execute_command(&cmd)
+        }
     }
 }
 
-// Mask IRQ and FIQ interrupts at CPU level
-// We don't have interrupt handlers yet, so mask them to prevent exceptions
-foreign {
-    @(link_name="mask_interrupts_asm")
-    mask_interrupts :: proc "c" () ---
-}
+// Note: mask_interrupts removed - we now have proper interrupt handling!
